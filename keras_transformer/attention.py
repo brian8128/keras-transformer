@@ -161,16 +161,16 @@ class _BaseMultiHeadAttention(Layer):
         # before performing batch_dot all tensors are being converted to 3D
         # shape (batch_size * num_heads, rows, cols) to make sure batch_dot
         # performs identically on all backends
+        softmax_output = K.softmax(
+            self.mask_attention_if_needed(
+                K.batch_dot(
+                    K.reshape(q, (-1,) + q_shape[-2:]),
+                    K.reshape(k_transposed,
+                        (-1,) + k_t_shape[-2:]))
+                            / sqrt_d))
         attention_heads = K.reshape(
             K.batch_dot(
-                self.apply_dropout_if_needed(
-                    K.softmax(
-                        self.mask_attention_if_needed(
-                            K.batch_dot(
-                                K.reshape(q, (-1,) + q_shape[-2:]),
-                                K.reshape(k_transposed,
-                                          (-1,) + k_t_shape[-2:]))
-                            / sqrt_d)),
+                self.apply_dropout_if_needed(softmax_output,
                     training=training),
                 K.reshape(v, (-1,) + v_shape[-2:])),
             (-1, self.num_heads, q_shape[-2], v_shape[-1]))
@@ -180,7 +180,8 @@ class _BaseMultiHeadAttention(Layer):
         attention_out = K.reshape(
             K.dot(attention_heads_merged, self.output_weights),
             (-1, out_seq_len, d_model))
-        return attention_out
+        softmax_output = K.reshape(softmax_output, (-1, self.num_heads)+K.int_shape(softmax_output)[1:])
+        return [attention_out, softmax_output]
 
     def apply_dropout_if_needed(self, attention_softmax, training=None):
         if 0.0 < self.dropout < 1.0:
@@ -252,6 +253,9 @@ class MultiHeadAttention(_BaseMultiHeadAttention):
             initializer='glorot_uniform', trainable=True)
         self.build_output_params(d_model)
         return super().build(input_shape)
+
+    def compute_output_shape(self, input_shape):
+        return [input_shape, (8, 49, 49)]
 
     def call(self, inputs, **kwargs):
         if not (isinstance(inputs, list) and len(inputs) == 2):
@@ -327,8 +331,7 @@ class MultiHeadSelfAttention(_BaseMultiHeadAttention):
         return attention_out
 
     def compute_output_shape(self, input_shape):
-        return input_shape
-
+        return [input_shape, (8, 49, 49)]
 
 get_custom_objects().update({
     'MultiHeadSelfAttention': MultiHeadSelfAttention,

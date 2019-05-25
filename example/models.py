@@ -107,8 +107,10 @@ def vanilla_transformer_gpt_model(
     next_step_input, embedding_matrix = embedding_layer(word_ids)
 
     next_step_input = coordinate_embedding_layer(next_step_input, step=0)
+
+    attention_layers = []
     for i in range(transformer_depth):
-        next_step_input = (
+        next_step_input, softmax_output = (
             TransformerBlock(
                 name='transformer' + str(i), num_heads=num_heads,
                 residual_dropout=transformer_dropout,
@@ -116,6 +118,7 @@ def vanilla_transformer_gpt_model(
                 use_masking=True,
                 vanilla_wiring=True)
             (next_step_input))
+        attention_layers.append(softmax_output)
 
     word_predictions = output_softmax_layer(
         output_layer([next_step_input, embedding_matrix]))
@@ -127,7 +130,8 @@ def vanilla_transformer_gpt_model(
         confidence_penalty_weight *
         K.sum(word_predictions * K.log(word_predictions), axis=-1))
     model.add_loss(confidence_penalty)
-    return model
+    attention_model = Model(inputs=[word_ids], outputs=[attention_layers[0]])
+    return model, attention_model
 
 
 def transformer_bert_model(

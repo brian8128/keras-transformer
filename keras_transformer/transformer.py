@@ -188,7 +188,7 @@ class TransformerBlock:
         self.vanilla_wiring = vanilla_wiring
 
     def __call__(self, _input):
-        output = self.attention_layer(_input)
+        output, softmax_output = self.attention_layer(_input)
         post_residual1 = (
             self.addition_layer([_input, self.dropout_layer(output)])
             if self.vanilla_wiring
@@ -201,7 +201,10 @@ class TransformerBlock:
             else self.dropout_layer(
                 self.addition_layer([norm1_output, output])))
         output = self.norm2_layer(post_residual2)
-        return output
+        return [output, softmax_output]
+
+    def compute_output_shape(self, input_shape):
+        return [input_shape, (8, 49, 49)]
 
 
 class TransformerACT(Layer):
